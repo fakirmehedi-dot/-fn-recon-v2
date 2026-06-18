@@ -210,9 +210,12 @@ def build_phase2_summary(results):
         mm_amt   = float(mismatch.get("Diff (USD)", pd.Series()).fillna(0).abs().sum()) if not mismatch.empty else 0
         # Not in PSP = key not found
         nip_qty  = len(not_in)
-        nip_orch = to_numeric_col(not_in.get("Orch_Amount", pd.Series()).astype(str)).sum()
-        nip_psp  = to_numeric_col(not_in.get("PSP_Amount", pd.Series()).astype(str)).sum()
-        nip_amt  = float(nip_orch) if nip_orch > 0 else float(nip_psp)
+nip_orch = to_numeric_col(not_in.get("Orch_Amount", pd.Series()).astype(str))
+        nip_psp  = to_numeric_col(not_in.get("PSP_Amount", pd.Series()).astype(str))
+        if nip_orch.notna().sum() > 0:
+            nip_amt = float(nip_orch.fillna(0).sum())
+        else:
+            nip_amt = float(nip_psp.fillna(0).abs().sum())
         extra_qty= 0
         extra_amt= 0.0
         match_pct= len(recon) / orch_qty * 100 if orch_qty else 0.0
