@@ -606,8 +606,11 @@ else:
 
             st.session_state.run_done = True
             pb.progress(100,"✅ Complete!"); stx.empty()
-            free_df_tmp = st.session_state.get("free_df")
-free_count = len(free_df_tmp) if free_df_tmp is not None and not free_df_tmp.empty else 0
+           try:
+                free_df_tmp = st.session_state.get("free_df")
+                free_count = len(free_df_tmp) if isinstance(free_df_tmp, pd.DataFrame) else 0
+            except Exception:
+                free_count = 0
             with st.spinner("📊 Syncing results to Google Sheets..."):
                 sync_to_google_sheets(api_en, results, start_date, end_date, free_count)
 
