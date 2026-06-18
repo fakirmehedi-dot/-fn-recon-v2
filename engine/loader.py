@@ -56,7 +56,7 @@ def _load_csv(content, skip_rows=0):
                         low_memory=False, skiprows=skip_rows, dtype=str)
 
 
-def concat_files(file_list):
+def concat_files(file_list, file_type=None):
     dfs = [load_file(f) for f in file_list]
     combined = pd.concat(dfs, ignore_index=True)
     return combined.drop_duplicates()
