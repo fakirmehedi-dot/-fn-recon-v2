@@ -7,6 +7,103 @@ st.set_page_config(page_title="FundedNext · Reconciliation",
                    page_icon="💰", layout="wide",
                    initial_sidebar_state="expanded")
 
+# ── Google Sheets Sync ────────────────────────────────────────────────────────
+APPS_SCRIPT_URL = "https://script.google.com/a/macros/nextventures.io/s/AKfycbyLBMeaDowd3gd6qT8PUGkOlNqxmQ61ftMigmccuZjyWXlXvWsMedHfSa3ai3YbVasX/exec"
+
+def _post_to_sheets(payload):
+    try:
+        import urllib.request, json
+        data = json.dumps(payload).encode("utf-8")
+        req = urllib.request.Request(APPS_SCRIPT_URL, data=data,
+            headers={"Content-Type": "application/json"}, method="POST")
+        urllib.request.urlopen(req, timeout=30)
+    except Exception as e:
+        st.warning(f"⚠️ Google Sheets sync: {e}")
+
+def sync_to_google_sheets(api_en, results, start_date, end_date, free_count=0):
+    """Send all reconciliation results to Google Sheets."""
+    try:
+        from engine.report_summary import compute_summary_stats
+        from engine.report_phase_summary import build_phase1_summary, build_phase2_summary
+
+        # Clear all sheets first
+        _post_to_sheets({"action": "clear_all"})
+
+        # KPI Summary
+        s = compute_summary_stats(api_en, results)
+        if s:
+            op = round(s["orch_orders"] / max(s["api_orders"], 1) * 100, 1)
+            pp = round(s["psp_orders"]  / max(s["api_orders"], 1) * 100, 1)
+            _post_to_sheets({
+                "action": "write_kpi",
+                "period": f"{start_date} → {end_date}",
+                "free_accounts": free_count,
+                "kpis": {
+                    "api_orders":    s["api_orders"],
+                    "api_rev":       round(s["api_rev"], 2),
+                    "orch_orders":   s["orch_orders"],
+                    "orch_rev":      round(s["orch_rev"], 2),
+                    "orch_pct":      op,
+                    "diff_orch":     s["diff_orch"],
+                    "diff_orch_rev": round(s["diff_orch_rev"], 2),
+                    "psp_orders":    s["psp_orders"],
+                    "psp_rev":       round(s["psp_rev"], 2),
+                    "psp_pct":       pp,
+                    "diff_psp":      s["diff_psp"],
+                    "diff_psp_rev":  round(s["diff_psp_rev"], 2),
+                }
+            })
+
+        # Phase 1 table
+        p1r = build_phase1_summary(api_en, results)
+        if p1r:
+            headers = ["Bank","API Qty","API Amt","Bank Qty","Bank Amt",
+                       "Mismatch Qty","Mismatch Amt","Not in Bank Qty","Not in Bank Amt",
+                       "Extra Qty","Extra Amt","Match %"]
+            rows = [[r["Bank Name"],r["API Qty"],r["API Amt"],r["Bank Qty"],r["Bank Amt"],
+                     r["Mismatch Qty"],r["Mismatch Amt"],r["Not in Bank Qty"],r["Not in Bank Amt"],
+                     r["Extra in Bank Qty"],r["Extra in Bank Amt"],r["Match %"]] for r in p1r]
+            _post_to_sheets({"action":"write_sheet","sheet_name":"Phase 1 — API vs Bank",
+                              "headers":headers,"rows":rows})
+
+        # Phase 2 table
+        p2r = build_phase2_summary(results)
+        if p2r:
+            headers = ["PSP","Orch Qty","Orch Amt","PSP Qty","PSP Amt",
+                       "Mismatch Qty","Mismatch Amt","Not in PSP Qty","Not in PSP Amt",
+                       "Extra Qty","Extra Amt","Match %"]
+            rows = [[r["PSP Name"],r["Orchestrator Qty"],r["Orchestrator Amt"],
+                     r["PSP Qty"],r["PSP Amt"],r["Mismatch Qty"],r["Mismatch Amt"],
+                     r["Not in PSP Qty"],r["Not in PSP Amt"],
+                     r["Extra in PSP Qty"],r["Extra in PSP Amt"],r["Match %"]] for r in p2r]
+            _post_to_sheets({"action":"write_sheet","sheet_name":"Phase 2 — Orch vs PSP",
+                              "headers":headers,"rows":rows})
+
+        # Recon Gap
+        from engine.report_recon_gap import build_recon_gap_report
+        import pandas as pd
+        gap = build_recon_gap_report(api_en, results, start_date, end_date)
+        if gap:
+            gap.seek(0)
+            import openpyxl
+            wb = openpyxl.load_workbook(gap)
+            for sheet_name in wb.sheetnames:
+                ws = wb[sheet_name]
+                data_rows = list(ws.iter_rows(values_only=True))
+                if len(data_rows) > 1:
+                    # skip title row if merged
+                    headers = [str(c) if c else "" for c in data_rows[1]]
+                    rows = [[str(c) if c is not None else "" for c in row]
+                            for row in data_rows[2:]]
+                    _post_to_sheets({"action":"write_sheet",
+                                      "sheet_name":sheet_name,
+                                      "headers":headers,"rows":rows[:500]})  # limit 500 rows
+
+        st.success("✅ Results synced to Google Sheets!")
+    except Exception as e:
+        st.warning(f"⚠️ Google Sheets sync failed: {e}")
+
+
 st.markdown("""<style>
 .fn-hdr{background:#0a1628;padding:13px 22px;border-radius:9px;
         display:flex;align-items:center;justify-content:space-between;margin-bottom:14px}
@@ -90,6 +187,64 @@ PSP_LABELS  = {"nuvei_ni":"Nuvei NI","nuvei_aq":"Nuvei AQ","axcess":"Axcess",
                "paypal":"PayPal","unlimit":"Unlimit","dlocal":"DLocal",
                "skrill":"Skrill","confirmo_bp":"Confirmo (BP)","zen_bp":"ZEN (BP)",
                "paysafe_bp":"Paysafe (BP)","paysafe_pp":"Paysafe (PP)"}
+
+
+# ── Google Sheets Sync ────────────────────────────────────────────────────────
+APPS_SCRIPT_URL = "https://script.google.com/a/macros/nextventures.io/s/AKfycbyLBMeaDowd3gd6qT8PUGkOlNqxmQ61ftMigmccuZjyWXlXvWsMedHfSa3ai3YbVasX/exec"
+
+def _post_to_sheets(payload):
+    import urllib.request, json as _json
+    try:
+        data = _json.dumps(payload).encode("utf-8")
+        req = urllib.request.Request(APPS_SCRIPT_URL, data=data,
+            headers={"Content-Type": "application/json"}, method="POST")
+        urllib.request.urlopen(req, timeout=30)
+    except Exception as ex:
+        st.warning(f"Sheets sync error: {ex}")
+
+def sync_to_google_sheets(api_en, results, start_date, end_date, free_count=0):
+    try:
+        from engine.report_summary import compute_summary_stats
+        from engine.report_phase_summary import build_phase1_summary, build_phase2_summary
+        _post_to_sheets({"action": "clear_all"})
+        s = compute_summary_stats(api_en, results)
+        if s:
+            op = round(s["orch_orders"] / max(s["api_orders"], 1) * 100, 1)
+            pp = round(s["psp_orders"]  / max(s["api_orders"], 1) * 100, 1)
+            _post_to_sheets({
+                "action": "write_kpi",
+                "period": f"{start_date} → {end_date}",
+                "free_accounts": free_count,
+                "kpis": {
+                    "api_orders": s["api_orders"], "api_rev": round(s["api_rev"], 2),
+                    "orch_orders": s["orch_orders"], "orch_rev": round(s["orch_rev"], 2),
+                    "orch_pct": op, "diff_orch": s["diff_orch"],
+                    "diff_orch_rev": round(s["diff_orch_rev"], 2),
+                    "psp_orders": s["psp_orders"], "psp_rev": round(s["psp_rev"], 2),
+                    "psp_pct": pp, "diff_psp": s["diff_psp"],
+                    "diff_psp_rev": round(s["diff_psp_rev"], 2),
+                }
+            })
+        p1r = build_phase1_summary(api_en, results)
+        if p1r:
+            h = ["Bank","API Qty","API Amt","Bank Qty","Bank Amt","Mismatch Qty",
+                 "Mismatch Amt","Not in Bank Qty","Not in Bank Amt","Extra Qty","Extra Amt","Match %"]
+            rows = [[r["Bank Name"],r["API Qty"],r["API Amt"],r["Bank Qty"],r["Bank Amt"],
+                     r["Mismatch Qty"],r["Mismatch Amt"],r["Not in Bank Qty"],r["Not in Bank Amt"],
+                     r["Extra in Bank Qty"],r["Extra in Bank Amt"],r["Match %"]] for r in p1r]
+            _post_to_sheets({"action":"write_sheet","sheet_name":"Phase 1 — API vs Bank","headers":h,"rows":rows})
+        p2r = build_phase2_summary(results)
+        if p2r:
+            h = ["PSP","Orch Qty","Orch Amt","PSP Qty","PSP Amt","Mismatch Qty",
+                 "Mismatch Amt","Not in PSP Qty","Not in PSP Amt","Extra Qty","Extra Amt","Match %"]
+            rows = [[r["PSP Name"],r["Orchestrator Qty"],r["Orchestrator Amt"],
+                     r["PSP Qty"],r["PSP Amt"],r["Mismatch Qty"],r["Mismatch Amt"],
+                     r["Not in PSP Qty"],r["Not in PSP Amt"],
+                     r["Extra in PSP Qty"],r["Extra in PSP Amt"],r["Match %"]] for r in p2r]
+            _post_to_sheets({"action":"write_sheet","sheet_name":"Phase 2 — Orch vs PSP","headers":h,"rows":rows})
+        st.success("✅ Results synced to Google Sheets — share this link with your team: https://docs.google.com/spreadsheets/d/1eQZFoDCdBd7HsgrWx8HZlOd2yEWdeZVkrI2N8Epq5bA/edit")
+    except Exception as ex:
+        st.warning(f"Google Sheets sync failed: {ex}")
 
 # ── Session state ─────────────────────────────────────────────────────────────
 for k,v in [("results",None),("out_files",None),("run_done",False),
@@ -451,6 +606,14 @@ else:
 
             st.session_state.run_done = True
             pb.progress(100,"✅ Complete!"); stx.empty()
+            free_count = len(st.session_state.get("free_df") or pd.DataFrame())
+            with st.spinner("📊 Syncing results to Google Sheets..."):
+                sync_to_google_sheets(api_en, results, start_date, end_date, free_count)
+
+            # Sync to Google Sheets
+            free_count = len(st.session_state.get("free_df", pd.DataFrame()) or pd.DataFrame())
+            with st.spinner("📊 Syncing to Google Sheets..."):
+                sync_to_google_sheets(api_en, results, start_date, end_date, free_count)
 
         except Exception as exc:
             pb.progress(0,"Error")
