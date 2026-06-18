@@ -208,10 +208,12 @@ def build_phase2_summary(results):
         # Mismatch = key matched but amount differs
         mm_qty   = len(mismatch)
         mm_amt   = float(mismatch.get("Diff (USD)", pd.Series()).fillna(0).abs().sum()) if not mismatch.empty else 0
-        # Not in PSP = key not found
+        # Not in PSP = key not found — amount is what wasn't confirmed
         nip_qty  = len(not_in)
-nip_orch = to_numeric_col(not_in.get("Orch_Amount", pd.Series()).astype(str))
+        nip_orch = to_numeric_col(not_in.get("Orch_Amount", pd.Series()).astype(str))
         nip_psp  = to_numeric_col(not_in.get("PSP_Amount", pd.Series()).astype(str))
+        # Use Orch_Amount if available (orch rows not found in PSP)
+        # Use PSP_Amount if Orch_Amount is all NaN (PSP rows not found in orch)
         if nip_orch.notna().sum() > 0:
             nip_amt = float(nip_orch.fillna(0).sum())
         else:
