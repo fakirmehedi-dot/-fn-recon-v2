@@ -93,7 +93,7 @@ def build_phase1_summary(api_df, results, p1_label="Period 1", p2_label="Period 
         # Bank qty/amt — rows where bank found a match
         matched  = df[df["Verdict"].isin(["RECONCILED","AMOUNT MISMATCH"])]
         bank_qty = len(matched)
-        ba_col   = find_col(df, ["Bank_Amount","bank_amount"])
+        ba_col   = find_col(df, ["Bank_Amount","bank_amount","_tcp_amt","Amount","amount"])
         bank_amt = float(to_numeric_col(matched[ba_col].astype(str)).sum()) if ba_col else 0.0
 
         recon    = df[df["Verdict"] == "RECONCILED"]
