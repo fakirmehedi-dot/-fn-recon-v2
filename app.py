@@ -307,11 +307,12 @@ with st.sidebar:
         # HTML Dashboard download
         html_data = st.session_state.get("dl_html_dashboard")
         if html_data:
-            st.download_button("🌐 Dashboard (HTML)",data=html_data,
+            st.markdown("---")
+            st.download_button("🌐 Download HTML Dashboard",data=html_data,
                 file_name=f"FN_Dashboard_{start_date}_{end_date}.html",
                 mime="text/html",use_container_width=True,key="sb_html")
-            st.markdown(f"[🔗 View Live Dashboard](https://fakirmehedi-dot.github.io/-fn-recon-v2/dashboard.html)",
-                unsafe_allow_html=False)
+        else:
+            st.info("Run reconciliation to generate HTML Dashboard")
 
 # ── Header ────────────────────────────────────────────────────────────────────
 period_str = (f"{start_date} → {end_date}" if mode=="Full Reconciliation"
