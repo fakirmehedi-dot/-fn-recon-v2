@@ -251,7 +251,7 @@ for k,v in [("results",None),("out_files",None),("run_done",False),
             ("api_df",None),("dup_df",None),("dup_detail",None),
             ("dl_order_wise",None),("dl_discrepancy",None),
             ("dl_comparison",None),("dl_psp_revenue",None),("dl_recon_gap",None),
-            ("dl_free_report",None),("free_df",None)]:
+            ("dl_free_report",None),("free_df",None),("dl_html_dashboard",None)]:
     if k not in st.session_state: st.session_state[k] = v
 
 # ── Sidebar ───────────────────────────────────────────────────────────────────
@@ -304,6 +304,14 @@ with st.sidebar:
                 st.download_button(label,data=data,file_name=fname,
                     mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
                     use_container_width=True,key=f"sb_{key}")
+        # HTML Dashboard download
+        html_data = st.session_state.get("dl_html_dashboard")
+        if html_data:
+            st.download_button("🌐 Dashboard (HTML)",data=html_data,
+                file_name=f"FN_Dashboard_{start_date}_{end_date}.html",
+                mime="text/html",use_container_width=True,key="sb_html")
+            st.markdown(f"[🔗 View Live Dashboard](https://fakirmehedi-dot.github.io/-fn-recon-v2/dashboard.html)",
+                unsafe_allow_html=False)
 
 # ── Header ────────────────────────────────────────────────────────────────────
 period_str = (f"{start_date} → {end_date}" if mode=="Full Reconciliation"
@@ -408,7 +416,7 @@ else:
 
     if run_btn:
         for k in ["results","out_files","run_done","api_df","dup_df","dup_detail",
-                  "dl_order_wise","dl_discrepancy","dl_comparison","dl_psp_revenue","dl_recon_gap","dl_free_report","free_df"]:
+                  "dl_order_wise","dl_discrepancy","dl_comparison","dl_psp_revenue","dl_recon_gap","dl_free_report","free_df","dl_html_dashboard"]:
             st.session_state[k] = None
         st.session_state.run_done = False
 
@@ -609,6 +617,14 @@ else:
             free_count = len(st.session_state.free_df) if isinstance(st.session_state.get("free_df"), pd.DataFrame) else 0
             with st.spinner("📊 Syncing results to Google Sheets..."):
                 sync_to_google_sheets(api_en, results, start_date, end_date, free_count)
+            # Generate HTML dashboard
+            try:
+                from engine.report_html_dashboard import build_html_dashboard
+                html = build_html_dashboard(api_en, results, start_date, end_date, free_count)
+                if html:
+                    st.session_state.dl_html_dashboard = html.encode("utf-8")
+            except Exception as e:
+                st.warning(f"⚠️ HTML Dashboard: {e}")
 
         except Exception as exc:
             pb.progress(0,"Error")
